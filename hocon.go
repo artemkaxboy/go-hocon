@@ -38,7 +38,7 @@ func (ptr *fieldWrapper) getTag() reflect.StructTag {
 	return ""
 }
 
-// LoadPropertiesFile loads configuration from given filename as HOCON.
+// LoadConfigFile loads configuration from given filename as HOCON.
 func LoadConfigFile(filename string, receiver interface{}) error {
 	if err := checkFileAccessibility(filename); err != nil {
 		return fmt.Errorf("cannot read configuration file: %w", err)
