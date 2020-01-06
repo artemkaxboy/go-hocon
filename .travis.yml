@@ -19,6 +19,7 @@ install:
   - go get github.com/onsi/ginkgo/ginkgo
   - go get github.com/modocache/gover
   - go get github.com/mattn/goveralls
+#  - if [ "$TRAVIS_SECURE_ENV_VARS" = "true" ]; then go get github.com/mattn/goveralls; fi
 
 script:
   # go-flags
@@ -33,6 +34,7 @@ script:
   - $(go env GOPATH | awk 'BEGIN{FS=":"} {print $1}')/bin/ginkgo -r -cover
   - $(go env GOPATH | awk 'BEGIN{FS=":"} {print $1}')/bin/gover
   - $(go env GOPATH | awk 'BEGIN{FS=":"} {print $1}')/bin/goveralls -coverprofile=gover.coverprofile -service=travis-ci -repotoken $COVERALL_REPO_TOKEN
+#  - if [ "$TRAVIS_SECURE_ENV_VARS" = "true" ]; then $(go env GOPATH | awk 'BEGIN{FS=":"} {print $1}')/bin/goveralls -coverprofile=gover.coverprofile -service=travis-ci -repotoken $COVERALLS_TOKEN; fi
 
 env:
   # coveralls.io
