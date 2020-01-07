@@ -9,7 +9,14 @@ import (
 	"strings"
 )
 
-//todo path for whole containers
+var boolVariants = map[string]bool{
+	"true":  true,
+	"on":    true,
+	"yes":   true,
+	"false": false,
+	"off":   false,
+	"no":    false,
+}
 
 type tag struct {
 	node            string
@@ -69,6 +76,12 @@ func getPath(parentPath string, field *reflect.StructField) (string, error) {
 
 // LoadConfigFile loads HOCON files parameters to given structure.
 func LoadConfigFile(filename string, receiver interface{}) error {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Cannot parse config")
+			panic(r)
+		}
+	}()
 	if err := checkFileAccessibility(filename); err != nil {
 		return fmt.Errorf("cannot read configuration file: %w", err)
 	}
@@ -78,6 +91,12 @@ func LoadConfigFile(filename string, receiver interface{}) error {
 
 // LoadConfigText parses given text as HOCON and loads parameters to given structure.
 func LoadConfigText(text string, receiver interface{}) error {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Cannot parse config")
+			panic(r)
+		}
+	}()
 	config := configuration.ParseString(text)
 	return loadConfig(config, receiver)
 }
@@ -136,15 +155,16 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 		rawDefault = getTypeDefault(typ)
 	}
 
-	kind := typ.Kind()
-	switch kind {
+	switch typ.Kind() {
 	case reflect.Uint:
-		return fmt.Errorf("cannot use %s. Use uint32 or uint64 explicitly instead for %s [%s]", kind, field.Name, field.Tag)
+		return fmt.Errorf("cannot use uint. Use uint32 or uint64 explicitly instead for %s [%s]", field.Name, field.Tag)
 
 	case reflect.Int:
-		return fmt.Errorf("cannot use %s. Use int32 or int64 explicitly instead for %s [%s]", kind, field.Name, field.Tag)
+		return fmt.Errorf("cannot use int. Use int32 or int64 explicitly instead for %s [%s]", field.Name, field.Tag)
 
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
 		_, err := parseType(typ, rawDefault)
 		if err != nil {
 			return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err)
@@ -162,7 +182,7 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 		typedValue := config.GetString(currentPath, rawDefault)
 		fieldValue.Elem().SetString(typedValue)
 	default:
-		return fmt.Errorf("unimplemented data type %s", kind.String())
+		return fmt.Errorf("unimplemented data type %s", typ.Kind().String())
 	}
 	return nil
 }
@@ -173,15 +193,16 @@ func getBitSizeOf(kind reflect.Kind) int {
 		return 8
 	case reflect.Int16, reflect.Uint16:
 		return 16
-	case reflect.Int32, reflect.Uint32:
+	case reflect.Int32, reflect.Uint32, reflect.Float32:
 		return 32
-	case reflect.Int64, reflect.Uint64:
+	case reflect.Int64, reflect.Uint64, reflect.Float64:
 		return 64
 	default:
 		return 0
 	}
 }
 
+// parseType parses given string according to given reflect.Type and returns reflect.Value of this type.
 func parseType(typ reflect.Type, string string) (reflect.Value, error) {
 	kind := typ.Kind()
 	switch kind {
@@ -197,6 +218,18 @@ func parseType(typ reflect.Type, string string) (reflect.Value, error) {
 			return reflect.Value{}, err
 		}
 		return reflect.ValueOf(intValue).Convert(typ), nil
+	case reflect.Float32, reflect.Float64:
+		floatValue, err := strconv.ParseFloat(string, getBitSizeOf(kind))
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		return reflect.ValueOf(floatValue).Convert(typ), nil
+	case reflect.Bool:
+		boolValue, ok := boolVariants[strings.ToLower(string)]
+		if !ok {
+			return reflect.Value{}, fmt.Errorf("for boolean setting use only: true, yes, on, false, no, off values")
+		}
+		return reflect.ValueOf(boolValue), nil
 	}
 	return reflect.Value{}, fmt.Errorf("unimplemented Type")
 }
@@ -214,7 +247,7 @@ func mapTag(structTag reflect.StructTag) (*tag, error) {
 		for _, item := range strings.Split(stringTag, ",") {
 			pair := strings.Split(item, "=")
 			if len(pair) != 2 {
-				return nil, fmt.Errorf("format error: %s", stringTag)
+				return nil, fmt.Errorf("tag format error: %s", stringTag)
 			}
 			key, value := pair[0], pair[1]
 
