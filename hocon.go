@@ -13,6 +13,7 @@ import (
 
 type tag struct {
 	node            string
+	nodeProvided    bool
 	path            string
 	pathProvided    bool
 	defaultValue    string
@@ -31,14 +32,42 @@ func (ptr *fieldWrapper) getType() reflect.Type {
 	return ptr.single
 }
 
-func (ptr *fieldWrapper) getTag() reflect.StructTag {
-	if ptr.inner != nil {
-		return ptr.inner.Tag
+// getPath is a facade method to call getPath with inner (StructField) or return empty string
+// if there is no inner element.
+func (ptr *fieldWrapper) getPath(parentPath string) (string, error) {
+	if ptr.inner == nil {
+		return "", nil
 	}
-	return ""
+	return getPath(parentPath, ptr.inner)
 }
 
-// LoadConfigFile loads configuration from given filename as HOCON.
+// getPath returns HOCON path for current element.
+//
+// There are a few methods to set it for each element:
+//
+// 1. Set path value in struct tag, then it will be taken as is
+//
+// 2. Set node value in struct tag, then it will be added to the parent path with '.' delimiter
+//
+// 3. Do not set any tag, then the name of struct field (as is) will be added to the parent path with '.' delimiter
+func getPath(parentPath string, field *reflect.StructField) (string, error) {
+	tag, err := mapTag(field.Tag)
+	if err != nil {
+		return "", err
+	}
+
+	if tag.pathProvided {
+		return tag.path, nil
+	}
+
+	if tag.nodeProvided {
+		return parentPath + "." + tag.node, nil
+	}
+
+	return parentPath + "." + field.Name, nil
+}
+
+// LoadConfigFile loads HOCON files parameters to given structure.
 func LoadConfigFile(filename string, receiver interface{}) error {
 	if err := checkFileAccessibility(filename); err != nil {
 		return fmt.Errorf("cannot read configuration file: %w", err)
@@ -47,42 +76,38 @@ func LoadConfigFile(filename string, receiver interface{}) error {
 	return loadConfig(config, receiver)
 }
 
-// LoadConfigText parses given text as HOCON.
+// LoadConfigText parses given text as HOCON and loads parameters to given structure.
 func LoadConfigText(text string, receiver interface{}) error {
 	config := configuration.ParseString(text)
 	return loadConfig(config, receiver)
 }
 
+// loadConfig - is an entrypoint to a recursive function which walk through receiver structure to
+// find and load needed parameters.
 func loadConfig(config *configuration.Config, receiver interface{}) error {
 	wrapper := &fieldWrapper{
 		single: reflect.ValueOf(receiver).Elem().Type(),
 	}
-	return loadStruct(wrapper, reflect.ValueOf(receiver), config)
+	return loadStruct("", wrapper, reflect.ValueOf(receiver), config)
 }
 
-func loadStruct(field *fieldWrapper, fieldValue reflect.Value, config *configuration.Config, nodes ...string) error {
-	tag, err := mapTag(field.getTag())
-	if err != nil {
-		return err
-	}
-
-	if field.inner != nil {
-		newNode := tag.node
-		if newNode == "" {
-			newNode = field.inner.Name
-		}
-		nodes = append(nodes, newNode)
+// loadStruct recursively walk through receiver struct nested elements to fill them with the
+// config data.
+func loadStruct(parentPath string, field *fieldWrapper, fieldValue reflect.Value, config *configuration.Config) error {
+	currentPath, err2 := field.getPath(parentPath)
+	if err2 != nil {
+		return err2
 	}
 
 	for i := 0; i < field.getType().NumField(); i++ {
 		innerField := field.getType().Field(i)
 		if innerField.Type.Kind() == reflect.Struct {
 			wrapper := &fieldWrapper{inner: &innerField}
-			if err := loadStruct(wrapper, fieldValue.Elem().FieldByName(innerField.Name).Addr(), config, nodes...); err != nil {
+			if err := loadStruct(currentPath, wrapper, fieldValue.Elem().FieldByName(innerField.Name).Addr(), config); err != nil {
 				return err
 			}
 		} else {
-			if err := loadValue(innerField, fieldValue.Elem().FieldByName(innerField.Name).Addr(), config, nodes...); err != nil {
+			if err := loadValue(currentPath, &innerField, fieldValue.Elem().FieldByName(innerField.Name).Addr(), config); err != nil {
 				return err
 			}
 		}
@@ -90,97 +115,109 @@ func loadStruct(field *fieldWrapper, fieldValue reflect.Value, config *configura
 	return nil
 }
 
-// loadValue loads value from configuration.Config to fieldValue according to its type
-func loadValue(field reflect.StructField, fieldValue reflect.Value, config *configuration.Config, nodes ...string) error {
+// loadValue loads value from config to fieldValue. It's a terminal method for recursive cycle of loadStruct.
+func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect.Value, config *configuration.Config) error {
 	tag, err := mapTag(field.Tag)
 	if err != nil {
 		return err
 	}
 
-	path := tag.path
-	if !tag.pathProvided {
-		newNode := tag.node
-		if newNode == "" {
-			newNode = field.Name
-		}
-		nodes = append(nodes, newNode)
-		path = strings.Join(nodes, ".")
-	}
+	// it's impossible to get error here while the only way to get it is give an element with incorrect tag and
+	// map tag is doing before this statement.
+	currentPath, _ := getPath(parentPath, field)
 
-	if !tag.defaultProvided && !config.HasPath(path) {
-		return fmt.Errorf("no value either default value provided for %s [%s]", field.Name, field.Tag)
-	}
+	typ := fieldValue.Elem().Type()
+
 	rawDefault := tag.defaultValue
+	if !tag.defaultProvided {
+		if !config.HasPath(currentPath) {
+			return fmt.Errorf("no value either default value provided for %s [%s]", field.Name, field.Tag)
+		}
+		rawDefault = getTypeDefault(typ)
+	}
 
-	kind := fieldValue.Elem().Kind()
+	kind := typ.Kind()
 	switch kind {
 	case reflect.Uint:
-		return fmt.Errorf("cannot use %s. Use int32 or int64 instead for %s [%s]", kind, field.Name, field.Tag)
+		return fmt.Errorf("cannot use %s. Use uint32 or uint64 explicitly instead for %s [%s]", kind, field.Name, field.Tag)
 
 	case reflect.Int:
 		return fmt.Errorf("cannot use %s. Use int32 or int64 explicitly instead for %s [%s]", kind, field.Name, field.Tag)
 
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		bitSize := 0
-		switch kind {
-		case reflect.Uint8:
-			bitSize = 8
-		case reflect.Uint16:
-			bitSize = 16
-		case reflect.Uint32:
-			bitSize = 32
-		case reflect.Uint64:
-			bitSize = 64
-		}
-		if rawDefault == "" {
-			rawDefault = "0"
-		}
-		_, err := strconv.ParseUint(rawDefault, 0, bitSize)
+		_, err := parseType(typ, rawDefault)
 		if err != nil {
 			return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err)
 		}
 
-		stringValue := config.GetString(path, rawDefault)
-		typedValue, err := strconv.ParseUint(stringValue, 0, bitSize)
+		stringValue := config.GetString(currentPath, rawDefault)
+
+		value, err := parseType(typ, stringValue)
 		if err != nil {
 			return fmt.Errorf("wrong value for %s [%s]: %w", field.Name, field.Tag, err)
 		}
-		fieldValue.Elem().SetUint(typedValue)
+		fieldValue.Elem().Set(value)
 
 	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		bitSize := 0
-		switch kind {
-		case reflect.Int8:
-			bitSize = 8
-		case reflect.Int16:
-			bitSize = 16
-		case reflect.Int32:
-			bitSize = 32
-		case reflect.Int64:
-			bitSize = 64
-		}
-
-		if rawDefault == "" {
-			rawDefault = "0"
-		}
-		_, err := strconv.ParseInt(rawDefault, 0, bitSize)
+		_, err := parseType(typ, rawDefault)
 		if err != nil {
 			return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err)
 		}
 
-		stringValue := config.GetString(path, rawDefault)
-		typedValue, err := strconv.ParseInt(stringValue, 0, bitSize)
+		stringValue := config.GetString(currentPath, rawDefault)
+
+		value, err := parseType(typ, stringValue)
 		if err != nil {
 			return fmt.Errorf("wrong value for %s [%s]: %w", field.Name, field.Tag, err)
 		}
-		fieldValue.Elem().SetInt(typedValue)
+		fieldValue.Elem().Set(value)
+
 	case reflect.String:
-		typedValue := config.GetString(path, rawDefault)
+		typedValue := config.GetString(currentPath, rawDefault)
 		fieldValue.Elem().SetString(typedValue)
 	default:
 		return fmt.Errorf("unimplemented data type %s", kind.String())
 	}
 	return nil
+}
+
+func getBitSizeOf(kind reflect.Kind) int {
+	switch kind {
+	case reflect.Int8, reflect.Uint8:
+		return 8
+	case reflect.Int16, reflect.Uint16:
+		return 16
+	case reflect.Int32, reflect.Uint32:
+		return 32
+	case reflect.Int64, reflect.Uint64:
+		return 64
+	default:
+		return 0
+	}
+}
+
+func parseType(typ reflect.Type, string string) (reflect.Value, error) {
+	kind := typ.Kind()
+	switch kind {
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		uintValue, err := strconv.ParseUint(string, 0, getBitSizeOf(kind))
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		return reflect.ValueOf(uintValue).Convert(typ), nil
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		intValue, err := strconv.ParseInt(string, 0, getBitSizeOf(kind))
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		return reflect.ValueOf(intValue).Convert(typ), nil
+	}
+	return reflect.Value{}, fmt.Errorf("unimplemented Type")
+}
+
+func getTypeDefault(typ reflect.Type) string {
+	v := reflect.Zero(typ)
+	return fmt.Sprintf("%v", reflect.ValueOf(v).Interface())
 }
 
 // mapTag parses StructTag to aux Tag struct.
@@ -204,6 +241,7 @@ func mapTag(structTag reflect.StructTag) (*tag, error) {
 				tag.defaultProvided = true
 			case "node":
 				tag.node = value
+				tag.nodeProvided = true
 			}
 		}
 	}
