@@ -95,23 +95,24 @@ func TestCorrectRanges(t *testing.T) {
 		"FMin3:-32768,FMax3:32767,FMin4:0,FMax4:65535,"+
 		"FMin5:-2147483648,FMax5:2147483647,FMin6:0,FMax6:4294967295,"+
 		"FMin7:-9223372036854775808,FMax7:9223372036854775807,FMin8:0,FMax8:18446744073709551615}", &props1)
-	assert.Nil(t, err)
-	assert.Equal(t, int8(-128), props1.FMin1)
-	assert.Equal(t, int8(127), props1.FMax1)
-	assert.Equal(t, uint8(0), props1.FMin2)
-	assert.Equal(t, uint8(255), props1.FMax2)
-	assert.Equal(t, int16(-32768), props1.FMin3)
-	assert.Equal(t, int16(32767), props1.FMax3)
-	assert.Equal(t, uint16(0), props1.FMin4)
-	assert.Equal(t, uint16(65535), props1.FMax4)
-	assert.Equal(t, int32(-2147483648), props1.FMin5)
-	assert.Equal(t, int32(2147483647), props1.FMax5)
-	assert.Equal(t, uint32(0), props1.FMin6)
-	assert.Equal(t, uint32(4294967295), props1.FMax6)
-	assert.Equal(t, int64(-9223372036854775808), props1.FMin7)
-	assert.Equal(t, int64(9223372036854775807), props1.FMax7)
-	assert.Equal(t, uint64(0), props1.FMin8)
-	assert.Equal(t, uint64(18446744073709551615), props1.FMax8)
+	if assert.Nil(t, err) {
+		assert.Equal(t, int8(-128), props1.FMin1)
+		assert.Equal(t, int8(127), props1.FMax1)
+		assert.Equal(t, uint8(0), props1.FMin2)
+		assert.Equal(t, uint8(255), props1.FMax2)
+		assert.Equal(t, int16(-32768), props1.FMin3)
+		assert.Equal(t, int16(32767), props1.FMax3)
+		assert.Equal(t, uint16(0), props1.FMin4)
+		assert.Equal(t, uint16(65535), props1.FMax4)
+		assert.Equal(t, int32(-2147483648), props1.FMin5)
+		assert.Equal(t, int32(2147483647), props1.FMax5)
+		assert.Equal(t, uint32(0), props1.FMin6)
+		assert.Equal(t, uint32(4294967295), props1.FMax6)
+		assert.Equal(t, int64(-9223372036854775808), props1.FMin7)
+		assert.Equal(t, int64(9223372036854775807), props1.FMax7)
+		assert.Equal(t, uint64(0), props1.FMin8)
+		assert.Equal(t, uint64(18446744073709551615), props1.FMax8)
+	}
 }
 
 func TestInt8DefaultRanges(t *testing.T) {
