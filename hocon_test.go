@@ -10,6 +10,7 @@ import (
 
 //todo test letters in int values
 //todo default overrides by value
+//todo path for whole containers
 
 func assertErrDefaultIsOutOfRange(t *testing.T, err error) {
 	assertErrRegex(t, err, "^wrong default value.*value out of range$")
@@ -277,6 +278,174 @@ func TestUInt64Ranges(t *testing.T) {
 	}{}
 	assertErrValueIsOutOfRange(t, LoadConfigText("{Field1: 18446744073709551616}", &props1))
 	assertErrValueInvalidSyntax(t, LoadConfigText("{Field1: -1}", &props1))
+}
+
+func TestCorrectFloat(t *testing.T) {
+	props1 := struct {
+		Field1 float32
+		Field2 float64
+	}{}
+	err := LoadConfigText("{Field1:1.2,Field2:1.7,}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, float32(1.2), props1.Field1)
+		assert.Equal(t, 1.7, props1.Field2)
+	}
+}
+
+func TestCorrectFloatDefault(t *testing.T) {
+	props1 := struct {
+		Field1 float32 `hocon:"default=1e3"`
+		Field2 float64 `hocon:"default=1e-3"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, float32(1000), props1.Field1)
+		assert.Equal(t, 0.001, props1.Field2)
+	}
+}
+
+func TestIncorrectFloat32(t *testing.T) {
+	props1 := struct {
+		Field1 float32
+	}{}
+	err := LoadConfigText("{Field1:1.2.3,}", &props1)
+	assert.Error(t, err)
+}
+
+func TestIncorrectFloat64(t *testing.T) {
+	props1 := struct {
+		Field1 float64
+	}{}
+	err := LoadConfigText("{Field1:7hh7,}", &props1)
+	assert.Error(t, err)
+}
+
+func TestIncorrectFloat32Default(t *testing.T) {
+	props1 := struct {
+		Field1 float32 `hocon:"default=1ee3"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	assert.Error(t, err)
+}
+
+func TestIncorrectFloat64Default(t *testing.T) {
+	props1 := struct {
+		Field1 float64 `hocon:"default=1ee3"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	assert.Error(t, err)
+}
+
+func TestCorrectBool(t *testing.T) {
+	props1 := struct {
+		Field1 bool
+		Field2 bool
+		Field3 bool
+		Field4 bool
+	}{}
+	err := LoadConfigText("{Field1:true,Field2:false,Field3:True,Field4:False,}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, true, props1.Field1)
+		assert.Equal(t, false, props1.Field2)
+		assert.Equal(t, true, props1.Field3)
+		assert.Equal(t, false, props1.Field4)
+	}
+}
+
+func TestCorrectBoolYesNo(t *testing.T) {
+	props1 := struct {
+		Field1 bool
+		Field2 bool
+		Field3 bool
+		Field4 bool
+	}{}
+	err := LoadConfigText("{Field1:yes,Field2:no,Field3:Yes,Field4:No,}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, true, props1.Field1)
+		assert.Equal(t, false, props1.Field2)
+		assert.Equal(t, true, props1.Field3)
+		assert.Equal(t, false, props1.Field4)
+	}
+}
+
+func TestCorrectBoolOnOff(t *testing.T) {
+	props1 := struct {
+		Field1 bool
+		Field2 bool
+		Field3 bool
+		Field4 bool
+	}{}
+	err := LoadConfigText("{Field1:on,Field2:off,Field3:On,Field4:Off,}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, true, props1.Field1)
+		assert.Equal(t, false, props1.Field2)
+		assert.Equal(t, true, props1.Field3)
+		assert.Equal(t, false, props1.Field4)
+	}
+}
+
+func TestCorrectBoolDefault(t *testing.T) {
+	props1 := struct {
+		Field1 bool `hocon:"default=true"`
+		Field2 bool `hocon:"default=false"`
+		Field3 bool `hocon:"default=True"`
+		Field4 bool `hocon:"default=False"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, true, props1.Field1)
+		assert.Equal(t, false, props1.Field2)
+		assert.Equal(t, true, props1.Field3)
+		assert.Equal(t, false, props1.Field4)
+	}
+}
+
+func TestCorrectBoolYesNoDefault(t *testing.T) {
+	props1 := struct {
+		Field1 bool `hocon:"default=yes"`
+		Field2 bool `hocon:"default=no"`
+		Field3 bool `hocon:"default=Yes"`
+		Field4 bool `hocon:"default=No"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, true, props1.Field1)
+		assert.Equal(t, false, props1.Field2)
+		assert.Equal(t, true, props1.Field3)
+		assert.Equal(t, false, props1.Field4)
+	}
+}
+
+func TestCorrectBoolOnOffDefault(t *testing.T) {
+	props1 := struct {
+		Field1 bool `hocon:"default=on"`
+		Field2 bool `hocon:"default=off"`
+		Field3 bool `hocon:"default=On"`
+		Field4 bool `hocon:"default=Off"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, true, props1.Field1)
+		assert.Equal(t, false, props1.Field2)
+		assert.Equal(t, true, props1.Field3)
+		assert.Equal(t, false, props1.Field4)
+	}
+}
+
+func TestIncorrectBool(t *testing.T) {
+	props1 := struct {
+		Field1 bool
+	}{}
+	err := LoadConfigText("{Field1:225,}", &props1)
+	assert.Error(t, err)
+}
+
+func TestIncorrectBoolDefault(t *testing.T) {
+	props1 := struct {
+		Field1 bool `hocon:"default=4567"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	assert.Error(t, err)
 }
 
 func TestPathByStruct(t *testing.T) {
