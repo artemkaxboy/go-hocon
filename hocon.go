@@ -78,7 +78,7 @@ func getPath(parentPath string, field *reflect.StructField) (string, error) {
 func LoadConfigFile(filename string, receiver interface{}) error {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Cannot parse config")
+			fmt.Println("Cannot parse config: Panic")
 			panic(r)
 		}
 	}()
@@ -93,7 +93,7 @@ func LoadConfigFile(filename string, receiver interface{}) error {
 func LoadConfigText(text string, receiver interface{}) error {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Cannot parse config")
+			fmt.Println("Cannot parse config: Panic")
 			panic(r)
 		}
 	}()

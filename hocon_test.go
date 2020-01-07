@@ -12,6 +12,18 @@ import (
 //todo default overrides by value
 //todo path for whole containers
 
+func makeTestFile(filemask string) (*os.File, error) {
+	return ioutil.TempFile("", filemask)
+}
+
+func deleteTestFile(file *os.File) error {
+	err := os.Remove(file.Name())
+	if err != nil {
+		log.Printf("cannot delete temp-file (%s): %s", file.Name(), err.Error())
+	}
+	return err
+}
+
 func assertErrDefaultIsOutOfRange(t *testing.T, err error) {
 	assertErrRegex(t, err, "^wrong default value.*value out of range$")
 }
@@ -574,10 +586,10 @@ func TestIncorrectTag(t *testing.T) {
 }
 
 func TestAbsentFile(t *testing.T) {
-	file, err1 := ioutil.TempFile("", "denied.conf")
+	file, err1 := makeTestFile("denied.conf")
 	if assert.Nil(t, err1, "cannot create temp file") {
 		filename := file.Name()
-		err2 := os.Remove(filename)
+		err2 := deleteTestFile(file)
 		if assert.Nil(t, err2, "cannot remove temp file") {
 			props1 := struct{}{}
 
@@ -590,13 +602,10 @@ func TestAbsentFile(t *testing.T) {
 }
 
 func TestDeniedFile(t *testing.T) {
-	file, err1 := ioutil.TempFile("", "denied.conf")
-	if assert.Nil(t, err1, "cannot create temp file") && assert.NotNil(t, file, "cannot create temp file") {
+	file, err1 := makeTestFile("denied.conf")
+	if assert.Nil(t, err1, "cannot create temp file") {
 		defer func() {
-			err := os.Remove(file.Name())
-			if err != nil {
-				log.Printf("cannot delete temp-file (%s): %s", file.Name(), err.Error())
-			}
+			_ = deleteTestFile(file)
 		}()
 		err2 := file.Chmod(os.FileMode(0))
 		if assert.Nil(t, err2, "cannot set file permissions") {
@@ -657,4 +666,29 @@ func TestUnimplemented(t *testing.T) {
 	}{}
 	err1 := LoadConfigText("{}", &props1)
 	assert.Error(t, err1)
+}
+
+func TestPanicTextConfig(t *testing.T) {
+	assert.Panics(t, func() {
+		props1 := struct{}{}
+		err1 := LoadConfigText("{F:1+1}", &props1)
+		assert.Error(t, err1)
+	})
+}
+
+func TestPanicFileConfig(t *testing.T) {
+	file, err1 := makeTestFile("panic.conf")
+	if assert.Nil(t, err1, "cannot create temp file") {
+		defer func() {
+			_ = deleteTestFile(file)
+		}()
+		_, err2 := file.WriteString("{F:1+1}")
+		if assert.Nil(t, err2) {
+			assert.Panics(t, func() {
+				props1 := struct{}{}
+				err1 := LoadConfigFile(file.Name(), &props1)
+				assert.Error(t, err1)
+			})
+		}
+	}
 }
