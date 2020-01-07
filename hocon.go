@@ -144,21 +144,7 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 	case reflect.Int:
 		return fmt.Errorf("cannot use %s. Use int32 or int64 explicitly instead for %s [%s]", kind, field.Name, field.Tag)
 
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		_, err := parseType(typ, rawDefault)
-		if err != nil {
-			return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err)
-		}
-
-		stringValue := config.GetString(currentPath, rawDefault)
-
-		value, err := parseType(typ, stringValue)
-		if err != nil {
-			return fmt.Errorf("wrong value for %s [%s]: %w", field.Name, field.Tag, err)
-		}
-		fieldValue.Elem().Set(value)
-
-	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		_, err := parseType(typ, rawDefault)
 		if err != nil {
 			return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err)
