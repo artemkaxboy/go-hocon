@@ -91,4 +91,4 @@ if props.AdvertEnabled {
 }
 ```
 ---
-You may find full example here: https://github.com/artemkaxboy/go-hocon-example
+You may find full example here: [go-hocon-example](https://github.com/artemkaxboy/go-hocon-example)
