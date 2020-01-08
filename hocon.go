@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"github.com/artemkaxboy/configuration"
 	"github.com/artemkaxboy/configuration/hocon"
-	"log"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -158,14 +156,13 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 	}
 
 	switch typ.Kind() {
-	case reflect.Uint:
-		return fmt.Errorf("cannot use uint. Use uint32 or uint64 explicitly instead for %s [%s]", field.Name, field.Tag)
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint:
+		return fmt.Errorf("cannot use uint. Use int8/16/32/64 instead for %s [%s]", field.Name, field.Tag)
 
 	case reflect.Int:
 		return fmt.Errorf("cannot use int. Use int32 or int64 explicitly instead for %s [%s]", field.Name, field.Tag)
 
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Float32, reflect.Float64, reflect.Bool:
 
 		var defaultValue *reflect.Value
@@ -211,80 +208,78 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 	return nil
 }
 
-func getBitSizeOf(kind reflect.Kind) int {
-	switch kind {
-	case reflect.Int8, reflect.Uint8:
-		return 8
-	case reflect.Int16, reflect.Uint16:
-		return 16
-	case reflect.Int32, reflect.Uint32, reflect.Float32:
-		return 32
-	case reflect.Int64, reflect.Uint64, reflect.Float64:
-		return 64
-	default:
-		return 0
-	}
-}
-
 func parseType(typ reflect.Type, stringValue string) (*reflect.Value, error) {
 	conf := configuration.ParseString(fmt.Sprintf("{k:%s}", stringValue))
 	return parseHoconValue(typ, conf.GetValue("k"))
 }
 
-// parseType parses given string according to given reflect.Type and returns reflect.Value of this type.
-func parseHoconValue(typ reflect.Type, stringValue *hocon.HoconValue, defaultValue ...*reflect.Value) (*reflect.Value, error) {
-	if stringValue == nil {
-		if defaultValue == nil {
-			return nil, nil
-		}
-		return defaultValue[0], nil
+// parseHoconValue parses given hoconValue according to given reflect.Type and returns reflect.Value of this type.
+func parseHoconValue(typ reflect.Type, hoconValue *hocon.HoconValue) (*reflect.Value, error) {
+	if hoconValue == nil {
+		return nil, nil
 	}
 
-	kind := typ.Kind()
-	switch kind {
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintValue, err := strconv.ParseUint(stringValue.GetString(), 0, getBitSizeOf(kind))
-		if err != nil {
-			return nil, err
-		}
-		reflectValue := reflect.ValueOf(uintValue).Convert(typ)
-		return &reflectValue, nil
-	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+	value, err := getExpandedValueSafely(typ, hoconValue)
+	if err != nil {
+		return nil, err
+	}
 
-		intValue, err := stringValue.GetInt64Safely()
-		if err != nil {
-			if defaultValue != nil {
-				return defaultValue[0], nil
-			}
-			return nil, err
-		}
-		int64Value := reflect.ValueOf(intValue)
-		targetTypeValue := int64Value.Convert(typ)
-		restored := targetTypeValue.Convert(int64type).Interface().(int64)
-		if intValue != restored {
+	value, err = getTargetTypeValue(typ, value)
+	if err != nil {
+		return nil, err
+	}
+
+	return value, nil
+}
+
+// getTargetTypeValue scale down to float32, int32, int16 etc.
+func getTargetTypeValue(typ reflect.Type, value *reflect.Value) (*reflect.Value, error) {
+	switch typ.Kind() {
+	case reflect.Int8, reflect.Int16, reflect.Int32:
+		targetTypeValue := value.Convert(typ)
+		expected := value.Interface().(int64)
+		actual := targetTypeValue.Convert(int64type).Interface().(int64)
+		if expected != actual {
 			return nil, fmt.Errorf("hocon: value out of range")
 		}
-		log.Println(restored)
 		return &targetTypeValue, nil
-	case reflect.Float32, reflect.Float64:
-		floatValue, err := strconv.ParseFloat(stringValue.GetString(), getBitSizeOf(kind))
-		if err != nil {
-			return nil, err
-		}
-		reflectValue := reflect.ValueOf(floatValue).Convert(typ)
-		return &reflectValue, nil
-	case reflect.Bool:
-		boolValue, err := stringValue.GetBooleanSafely()
-		if err != nil {
-			return nil, err
-		}
-		reflectValue := reflect.ValueOf(boolValue)
-		return &reflectValue, nil
-	case reflect.String:
-		reflectValue := reflect.ValueOf(stringValue.GetString())
-		return &reflectValue, nil
+
+	case reflect.Float32:
+		targetTypeValue := value.Convert(typ)
+		return &targetTypeValue, nil
+
 	}
-	return nil, fmt.Errorf("unimplemented Type")
+
+	return value, nil
+}
+
+// getExpandedValueSafely returns 64 bit value of ints and floats
+// and regular value of others
+func getExpandedValueSafely(typ reflect.Type, hoconValue *hocon.HoconValue) (*reflect.Value, error) {
+	var value interface{}
+	var err error
+
+	switch typ.Kind() {
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		value, err = hoconValue.GetInt64Safely()
+		if err != nil {
+			return nil, err
+		}
+	case reflect.Float32, reflect.Float64:
+		value, err = hoconValue.GetFloat64Safely()
+		if err != nil {
+			return nil, err
+		}
+	case reflect.Bool:
+		value, err = hoconValue.GetBooleanSafely()
+		if err != nil {
+			return nil, err
+		}
+	case reflect.String:
+		value = hoconValue.GetString()
+	}
+	reflectValue := reflect.ValueOf(value)
+	return &reflectValue, nil
 }
 
 // parseList parses given slice's values according to given reflect.Type and

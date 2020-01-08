@@ -48,61 +48,37 @@ func assertErrRegex(t *testing.T, err error, regex string) {
 
 func TestCorrectDefaultRanges(t *testing.T) {
 	props1 := struct {
-		FMin1 int8   `hocon:"default=-128"`
-		FMax1 int8   `hocon:"default=127"`
-		FMin2 uint8  `hocon:"default=0"`
-		FMax2 uint8  `hocon:"default=255"`
-		FMin3 int16  `hocon:"default=-32768"`
-		FMax3 int16  `hocon:"default=32767"`
-		FMin4 uint16 `hocon:"default=0"`
-		FMax4 uint16 `hocon:"default=65535"`
-		FMin5 int32  `hocon:"default=-2147483648"`
-		FMax5 int32  `hocon:"default=2147483647"`
-		FMin6 uint32 `hocon:"default=0"`
-		FMax6 uint32 `hocon:"default=4294967295"`
-		FMin7 int64  `hocon:"default=-9223372036854775808"`
-		FMax7 int64  `hocon:"default=9223372036854775807"`
-		FMin8 uint64 `hocon:"default=0"`
-		FMax8 uint64 `hocon:"default=18446744073709551615"`
+		FMin1 int8  `hocon:"default=-128"`
+		FMax1 int8  `hocon:"default=127"`
+		FMin3 int16 `hocon:"default=-32768"`
+		FMax3 int16 `hocon:"default=32767"`
+		FMin5 int32 `hocon:"default=-2147483648"`
+		FMax5 int32 `hocon:"default=2147483647"`
+		FMin7 int64 `hocon:"default=-9223372036854775808"`
+		FMax7 int64 `hocon:"default=9223372036854775807"`
 	}{}
 	err := LoadConfigText("{key1: 1}", &props1)
 	assert.Nil(t, err)
 	assert.Equal(t, int8(-128), props1.FMin1)
 	assert.Equal(t, int8(127), props1.FMax1)
-	assert.Equal(t, uint8(0), props1.FMin2)
-	assert.Equal(t, uint8(255), props1.FMax2)
 	assert.Equal(t, int16(-32768), props1.FMin3)
 	assert.Equal(t, int16(32767), props1.FMax3)
-	assert.Equal(t, uint16(0), props1.FMin4)
-	assert.Equal(t, uint16(65535), props1.FMax4)
 	assert.Equal(t, int32(-2147483648), props1.FMin5)
 	assert.Equal(t, int32(2147483647), props1.FMax5)
-	assert.Equal(t, uint32(0), props1.FMin6)
-	assert.Equal(t, uint32(4294967295), props1.FMax6)
 	assert.Equal(t, int64(-9223372036854775808), props1.FMin7)
 	assert.Equal(t, int64(9223372036854775807), props1.FMax7)
-	assert.Equal(t, uint64(0), props1.FMin8)
-	assert.Equal(t, uint64(18446744073709551615), props1.FMax8)
 }
 
 func TestCorrectRanges(t *testing.T) {
 	props1 := struct {
 		FMin1 int8
 		FMax1 int8
-		FMin2 uint8
-		FMax2 uint8
 		FMin3 int16
 		FMax3 int16
-		FMin4 uint16
-		FMax4 uint16
 		FMin5 int32
 		FMax5 int32
-		FMin6 uint32
-		FMax6 uint32
 		FMin7 int64
 		FMax7 int64
-		FMin8 uint64
-		FMax8 uint64
 	}{}
 	err := LoadConfigText("{FMin1:-128,FMax1:127,FMin2:0,FMax2:255,"+
 		"FMin3:-32768,FMax3:32767,FMin4:0,FMax4:65535,"+
@@ -111,20 +87,12 @@ func TestCorrectRanges(t *testing.T) {
 	if assert.Nil(t, err) {
 		assert.Equal(t, int8(-128), props1.FMin1)
 		assert.Equal(t, int8(127), props1.FMax1)
-		assert.Equal(t, uint8(0), props1.FMin2)
-		assert.Equal(t, uint8(255), props1.FMax2)
 		assert.Equal(t, int16(-32768), props1.FMin3)
 		assert.Equal(t, int16(32767), props1.FMax3)
-		assert.Equal(t, uint16(0), props1.FMin4)
-		assert.Equal(t, uint16(65535), props1.FMax4)
 		assert.Equal(t, int32(-2147483648), props1.FMin5)
 		assert.Equal(t, int32(2147483647), props1.FMax5)
-		assert.Equal(t, uint32(0), props1.FMin6)
-		assert.Equal(t, uint32(4294967295), props1.FMax6)
 		assert.Equal(t, int64(-9223372036854775808), props1.FMin7)
 		assert.Equal(t, int64(9223372036854775807), props1.FMax7)
-		assert.Equal(t, uint64(0), props1.FMin8)
-		assert.Equal(t, uint64(18446744073709551615), props1.FMax8)
 	}
 }
 
@@ -178,56 +146,6 @@ func TestInt64DefaultRanges(t *testing.T) {
 	assertErrDefaultIsOutOfRange(t, LoadConfigText("{key1: 1}", &props2))
 }
 
-func TestUInt8DefaultRanges(t *testing.T) {
-	props1 := struct {
-		Field1 uint8 `hocon:"default=256"`
-	}{}
-	err := LoadConfigText("{key1: 1}", &props1)
-	assertErrDefaultIsOutOfRange(t, err)
-
-	props2 := struct {
-		Field1 uint8 `hocon:"default=-1"`
-	}{}
-	err2 := LoadConfigText("{key1: 1}", &props2)
-	assertErrDefaultInvalidSyntax(t, err2)
-}
-
-func TestUInt16DefaultRanges(t *testing.T) {
-	props1 := struct {
-		Field1 uint16 `hocon:"default=65536"`
-	}{}
-	assertErrDefaultIsOutOfRange(t, LoadConfigText("{key1: 1}", &props1))
-
-	props2 := struct {
-		Field1 uint16 `hocon:"default=-1"`
-	}{}
-	assertErrDefaultInvalidSyntax(t, LoadConfigText("{key1: 1}", &props2))
-}
-
-func TestUInt32DefaultRanges(t *testing.T) {
-	props1 := struct {
-		Field1 uint32 `hocon:"default=4294967296"`
-	}{}
-	assertErrDefaultIsOutOfRange(t, LoadConfigText("{key1: 1}", &props1))
-
-	props2 := struct {
-		Field1 uint32 `hocon:"default=-1"`
-	}{}
-	assertErrDefaultInvalidSyntax(t, LoadConfigText("{key1: 1}", &props2))
-}
-
-func TestUInt64DefaultRanges(t *testing.T) {
-	props1 := struct {
-		Field1 uint64 `hocon:"default=18446744073709551616"`
-	}{}
-	assertErrDefaultIsOutOfRange(t, LoadConfigText("{key1: 1}", &props1))
-
-	props2 := struct {
-		Field1 uint64 `hocon:"default=-1"`
-	}{}
-	assertErrDefaultInvalidSyntax(t, LoadConfigText("{key1: 1}", &props2))
-}
-
 func TestInt8Ranges(t *testing.T) {
 	props1 := struct {
 		Field1 int8
@@ -258,38 +176,6 @@ func TestInt64Ranges(t *testing.T) {
 	}{}
 	assertErrValueIsOutOfRange(t, LoadConfigText("{Field1: 9223372036854775808}", &props1))
 	assertErrValueIsOutOfRange(t, LoadConfigText("{Field1: -9223372036854775809}", &props1))
-}
-
-func TestUInt8Ranges(t *testing.T) {
-	props1 := struct {
-		Field1 uint8
-	}{}
-	assertErrValueIsOutOfRange(t, LoadConfigText("{Field1: 256}", &props1))
-	assertErrValueInvalidSyntax(t, LoadConfigText("{Field1: -1}", &props1))
-}
-
-func TestUInt16Ranges(t *testing.T) {
-	props1 := struct {
-		Field1 uint16
-	}{}
-	assertErrValueIsOutOfRange(t, LoadConfigText("{Field1: 65536}", &props1))
-	assertErrValueInvalidSyntax(t, LoadConfigText("{Field1: -1}", &props1))
-}
-
-func TestUInt32Ranges(t *testing.T) {
-	props1 := struct {
-		Field1 uint32
-	}{}
-	assertErrValueIsOutOfRange(t, LoadConfigText("{Field1: 4294967296}", &props1))
-	assertErrValueInvalidSyntax(t, LoadConfigText("{Field1: -1}", &props1))
-}
-
-func TestUInt64Ranges(t *testing.T) {
-	props1 := struct {
-		Field1 uint64
-	}{}
-	assertErrValueIsOutOfRange(t, LoadConfigText("{Field1: 18446744073709551616}", &props1))
-	assertErrValueInvalidSyntax(t, LoadConfigText("{Field1: -1}", &props1))
 }
 
 func TestCorrectFloat(t *testing.T) {
@@ -500,11 +386,11 @@ func TestCorrectInt8Slice(t *testing.T) {
 
 func TestCorrectInt32Slice(t *testing.T) {
 	props1 := struct {
-		Field1 []uint32
+		Field1 []int32
 	}{}
 	err := LoadConfigText("{Field1:[1,2,3,4]}", &props1)
 	if assert.Nil(t, err) {
-		assert.Equal(t, []uint32{1, 2, 3, 4}, props1.Field1)
+		assert.Equal(t, []int32{1, 2, 3, 4}, props1.Field1)
 	}
 }
 
@@ -722,6 +608,30 @@ func TestUnsupported(t *testing.T) {
 	}{}
 	err2 := LoadConfigText("{}", &props2)
 	assert.Error(t, err2)
+
+	props3 := struct {
+		Key uint8 `hocon:"default=0"`
+	}{}
+	err3 := LoadConfigText("{}", &props3)
+	assert.Error(t, err3)
+
+	props4 := struct {
+		Key uint16 `hocon:"default=0"`
+	}{}
+	err4 := LoadConfigText("{}", &props4)
+	assert.Error(t, err4)
+
+	props5 := struct {
+		Key uint32 `hocon:"default=0"`
+	}{}
+	err5 := LoadConfigText("{}", &props5)
+	assert.Error(t, err5)
+
+	props6 := struct {
+		Key uint64 `hocon:"default=0"`
+	}{}
+	err6 := LoadConfigText("{}", &props6)
+	assert.Error(t, err6)
 }
 
 func TestUnimplemented(t *testing.T) {
