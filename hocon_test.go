@@ -460,6 +460,52 @@ func TestIncorrectBoolDefault(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestCorrectStringSlice(t *testing.T) {
+	props1 := struct {
+		Field1 []string
+	}{}
+	err := LoadConfigText("{Field1:[a,b,c,d]}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, []string{"a", "b", "c", "d"}, props1.Field1)
+	}
+}
+
+func TestCorrectInt8Slice(t *testing.T) {
+	props1 := struct {
+		Field1 []int8
+	}{}
+	err := LoadConfigText("{Field1:[1,2,3,4]}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, []int8{1, 2, 3, 4}, props1.Field1)
+	}
+}
+
+func TestCorrectInt32Slice(t *testing.T) {
+	props1 := struct {
+		Field1 []uint32
+	}{}
+	err := LoadConfigText("{Field1:[1,2,3,4]}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, []uint32{1, 2, 3, 4}, props1.Field1)
+	}
+}
+
+func TestIncorrectInt8Slice(t *testing.T) {
+	props1 := struct {
+		Field1 []int8
+	}{}
+	err := LoadConfigText("{Field1:[1,2,3,1000]}", &props1)
+	assert.Error(t, err)
+}
+
+func TestIncorrectSliceDefault(t *testing.T) {
+	props1 := struct {
+		Field1 []string `hocon:"default=11"`
+	}{}
+	err := LoadConfigText("{}", &props1)
+	assert.Error(t, err)
+}
+
 func TestPathByStruct(t *testing.T) {
 	props1 := struct {
 		Inner1 struct {
@@ -662,7 +708,7 @@ func TestUnsupported(t *testing.T) {
 
 func TestUnimplemented(t *testing.T) {
 	props1 := struct {
-		Key []int `hocon:"default=0"`
+		Key func() `hocon:"default=0"`
 	}{}
 	err1 := LoadConfigText("{}", &props1)
 	assert.Error(t, err1)

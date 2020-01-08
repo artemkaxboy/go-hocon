@@ -67,11 +67,15 @@ func getPath(parentPath string, field *reflect.StructField) (string, error) {
 		return tag.path, nil
 	}
 
-	if tag.nodeProvided {
-		return parentPath + "." + tag.node, nil
+	if len(parentPath) > 0 {
+		parentPath = parentPath + "."
 	}
 
-	return parentPath + "." + field.Name, nil
+	if tag.nodeProvided {
+		return parentPath + tag.node, nil
+	}
+
+	return parentPath + field.Name, nil
 }
 
 // LoadConfigFile loads HOCON files parameters to given structure.
@@ -148,7 +152,11 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 	typ := fieldValue.Elem().Type()
 
 	rawDefault := tag.defaultValue
-	if !tag.defaultProvided {
+	if tag.defaultProvided {
+		if typ.Kind() == reflect.Slice {
+			return fmt.Errorf("slices do not support default value: %s [%s]", field.Name, field.Tag)
+		}
+	} else {
 		if !config.HasPath(currentPath) {
 			return fmt.Errorf("no value either default value provided for %s [%s]", field.Name, field.Tag)
 		}
@@ -181,6 +189,16 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 	case reflect.String:
 		typedValue := config.GetString(currentPath, rawDefault)
 		fieldValue.Elem().SetString(typedValue)
+
+	case reflect.Slice:
+		list := config.GetStringList(currentPath)
+		value := reflect.ValueOf(list)
+		typedValue, err1 := parseList(typ, value)
+		if err1 != nil {
+			return err1
+		}
+		fieldValue.Elem().Set(typedValue)
+
 	default:
 		return fmt.Errorf("unimplemented data type %s", typ.Kind().String())
 	}
@@ -203,35 +221,51 @@ func getBitSizeOf(kind reflect.Kind) int {
 }
 
 // parseType parses given string according to given reflect.Type and returns reflect.Value of this type.
-func parseType(typ reflect.Type, string string) (reflect.Value, error) {
+func parseType(typ reflect.Type, stringValue string) (reflect.Value, error) {
 	kind := typ.Kind()
 	switch kind {
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintValue, err := strconv.ParseUint(string, 0, getBitSizeOf(kind))
+		uintValue, err := strconv.ParseUint(stringValue, 0, getBitSizeOf(kind))
 		if err != nil {
 			return reflect.Value{}, err
 		}
 		return reflect.ValueOf(uintValue).Convert(typ), nil
 	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		intValue, err := strconv.ParseInt(string, 0, getBitSizeOf(kind))
+		intValue, err := strconv.ParseInt(stringValue, 0, getBitSizeOf(kind))
 		if err != nil {
 			return reflect.Value{}, err
 		}
 		return reflect.ValueOf(intValue).Convert(typ), nil
 	case reflect.Float32, reflect.Float64:
-		floatValue, err := strconv.ParseFloat(string, getBitSizeOf(kind))
+		floatValue, err := strconv.ParseFloat(stringValue, getBitSizeOf(kind))
 		if err != nil {
 			return reflect.Value{}, err
 		}
 		return reflect.ValueOf(floatValue).Convert(typ), nil
 	case reflect.Bool:
-		boolValue, ok := boolVariants[strings.ToLower(string)]
+		boolValue, ok := boolVariants[strings.ToLower(stringValue)]
 		if !ok {
 			return reflect.Value{}, fmt.Errorf("for boolean setting use only: true, yes, on, false, no, off values")
 		}
 		return reflect.ValueOf(boolValue), nil
+	case reflect.String:
+		return reflect.ValueOf(stringValue), nil
 	}
 	return reflect.Value{}, fmt.Errorf("unimplemented Type")
+}
+
+// parseList parses given slice's values according to given reflect.Type and
+// returns reflect.Value of slice of this type.
+func parseList(typ reflect.Type, listValue reflect.Value) (reflect.Value, error) {
+	sliceValue := reflect.MakeSlice(typ, listValue.Len(), listValue.Cap())
+	for i := 0; i < listValue.Len(); i++ {
+		res, err := parseType(typ.Elem(), listValue.Index(i).Interface().(string))
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		sliceValue.Index(i).Set(res)
+	}
+	return sliceValue, nil
 }
 
 func getTypeDefault(typ reflect.Type) string {
