@@ -2,21 +2,16 @@ package hocon
 
 import (
 	"fmt"
-	"github.com/go-akka/configuration"
+	"github.com/artemkaxboy/configuration"
+	"github.com/artemkaxboy/configuration/hocon"
+	"log"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
 )
 
-var boolVariants = map[string]bool{
-	"true":  true,
-	"on":    true,
-	"yes":   true,
-	"false": false,
-	"off":   false,
-	"no":    false,
-}
+var int64type = reflect.TypeOf(int64(0))
 
 type tag struct {
 	node            string
@@ -173,18 +168,19 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Float32, reflect.Float64, reflect.Bool:
-		_, err := parseType(typ, rawDefault)
+		defaultValue, err := parseType(typ, rawDefault)
 		if err != nil {
 			return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err)
 		}
 
-		stringValue := config.GetString(currentPath, rawDefault)
+		//stringValue := config.GetString(currentPath, rawDefault)
+		hoconValue := config.GetValue(currentPath)
 
-		value, err := parseType(typ, stringValue)
+		value, err := parseHoconValue(typ, hoconValue, defaultValue)
 		if err != nil {
 			return fmt.Errorf("wrong value for %s [%s]: %w", field.Name, field.Tag, err)
 		}
-		fieldValue.Elem().Set(value)
+		fieldValue.Elem().Set(*value)
 
 	case reflect.String:
 		typedValue := config.GetString(currentPath, rawDefault)
@@ -220,38 +216,62 @@ func getBitSizeOf(kind reflect.Kind) int {
 	}
 }
 
+func parseType(typ reflect.Type, stringValue string) (*reflect.Value, error) {
+	conf := configuration.ParseString(fmt.Sprintf("{k:%s}", stringValue))
+	return parseHoconValue(typ, conf.GetValue("k"))
+}
+
 // parseType parses given string according to given reflect.Type and returns reflect.Value of this type.
-func parseType(typ reflect.Type, stringValue string) (reflect.Value, error) {
+func parseHoconValue(typ reflect.Type, stringValue *hocon.HoconValue, defaultValue ...*reflect.Value) (*reflect.Value, error) {
+	if stringValue == nil { // todo if defaultvalue nil
+		return defaultValue[0], nil
+	}
+
 	kind := typ.Kind()
 	switch kind {
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintValue, err := strconv.ParseUint(stringValue, 0, getBitSizeOf(kind))
+		uintValue, err := strconv.ParseUint(stringValue.GetString(), 0, getBitSizeOf(kind))
 		if err != nil {
-			return reflect.Value{}, err
+			return nil, err
 		}
-		return reflect.ValueOf(uintValue).Convert(typ), nil
+		reflectValue := reflect.ValueOf(uintValue).Convert(typ)
+		return &reflectValue, nil
 	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		intValue, err := strconv.ParseInt(stringValue, 0, getBitSizeOf(kind))
+
+		intValue, err := stringValue.GetInt64Safely()
 		if err != nil {
-			return reflect.Value{}, err
+			if defaultValue != nil {
+				return defaultValue[0], nil
+			}
+			return nil, err
 		}
-		return reflect.ValueOf(intValue).Convert(typ), nil
+		int64Value := reflect.ValueOf(intValue)
+		targetTypeValue := int64Value.Convert(typ)
+		restored := targetTypeValue.Convert(int64type).Interface().(int64)
+		if intValue != restored {
+			return nil, fmt.Errorf("hocon: value out of range")
+		}
+		log.Println(restored)
+		return &targetTypeValue, nil
 	case reflect.Float32, reflect.Float64:
-		floatValue, err := strconv.ParseFloat(stringValue, getBitSizeOf(kind))
+		floatValue, err := strconv.ParseFloat(stringValue.GetString(), getBitSizeOf(kind))
 		if err != nil {
-			return reflect.Value{}, err
+			return nil, err
 		}
-		return reflect.ValueOf(floatValue).Convert(typ), nil
+		reflectValue := reflect.ValueOf(floatValue).Convert(typ)
+		return &reflectValue, nil
 	case reflect.Bool:
-		boolValue, ok := boolVariants[strings.ToLower(stringValue)]
-		if !ok {
-			return reflect.Value{}, fmt.Errorf("for boolean setting use only: true, yes, on, false, no, off values")
+		boolValue, err := stringValue.GetBooleanSafely()
+		if err != nil {
+			return nil, err
 		}
-		return reflect.ValueOf(boolValue), nil
+		reflectValue := reflect.ValueOf(boolValue)
+		return &reflectValue, nil
 	case reflect.String:
-		return reflect.ValueOf(stringValue), nil
+		reflectValue := reflect.ValueOf(stringValue.GetString())
+		return &reflectValue, nil
 	}
-	return reflect.Value{}, fmt.Errorf("unimplemented Type")
+	return nil, fmt.Errorf("unimplemented Type")
 }
 
 // parseList parses given slice's values according to given reflect.Type and
@@ -263,7 +283,7 @@ func parseList(typ reflect.Type, listValue reflect.Value) (reflect.Value, error)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		sliceValue.Index(i).Set(res)
+		sliceValue.Index(i).Set(*res)
 	}
 	return sliceValue, nil
 }

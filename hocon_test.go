@@ -132,7 +132,7 @@ func TestInt8DefaultRanges(t *testing.T) {
 	props1 := struct {
 		Field1 int8 `hocon:"default=128"`
 	}{}
-	err := LoadConfigText("{key1: 1}", &props1)
+	err := LoadConfigText("{}", &props1)
 	assertErrDefaultIsOutOfRange(t, err)
 
 	props2 := struct {
