@@ -396,6 +396,24 @@ func TestCorrectBoolOnOff(t *testing.T) {
 	}
 }
 
+func TestK(t *testing.T) {
+	props1 := struct {
+		Field1 int64
+	}{}
+	err := LoadConfigText("{Field1:32000,}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, int64(32000), props1.Field1)
+	}
+
+	props2 := struct {
+		Field1 int64
+	}{}
+	err2 := LoadConfigText("{Orig:100,Field1:${Orig},}", &props2)
+	if assert.Nil(t, err2) {
+		assert.Equal(t, int64(100), props2.Field1)
+	}
+}
+
 func TestCorrectBoolDefault(t *testing.T) {
 	props1 := struct {
 		Field1 bool `hocon:"default=true"`

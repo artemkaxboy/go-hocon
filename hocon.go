@@ -11,16 +11,15 @@ import (
 	"strings"
 )
 
-var int64type = reflect.TypeOf(int64(0))
+const pathKey = "path"
+const nodeKey = "node"
+const defaultKey = "default"
 
-type tag struct {
-	node            string
-	nodeProvided    bool
-	path            string
-	pathProvided    bool
-	defaultValue    string
-	defaultProvided bool
-}
+var (
+	int64type = reflect.TypeOf(int64(0))
+
+	tagKeys = map[string]interface{}{pathKey: nil, nodeKey: nil, defaultKey: nil}
+)
 
 type fieldWrapper struct {
 	inner  *reflect.StructField
@@ -53,21 +52,21 @@ func (ptr *fieldWrapper) getPath(parentPath string) (string, error) {
 //
 // 3. Do not set any tag, then the name of struct field (as is) will be added to the parent path with '.' delimiter
 func getPath(parentPath string, field *reflect.StructField) (string, error) {
-	tag, err := mapTag(field.Tag)
+	tagMap, err := mapTag(field.Tag)
 	if err != nil {
 		return "", err
 	}
 
-	if tag.pathProvided {
-		return tag.path, nil
+	if path, exists := tagMap[pathKey]; exists {
+		return path, nil
 	}
 
 	if len(parentPath) > 0 {
 		parentPath = parentPath + "."
 	}
 
-	if tag.nodeProvided {
-		return parentPath + tag.node, nil
+	if node, exists := tagMap[nodeKey]; exists {
+		return parentPath + node, nil
 	}
 
 	return parentPath + field.Name, nil
@@ -135,7 +134,7 @@ func loadStruct(parentPath string, field *fieldWrapper, fieldValue reflect.Value
 
 // loadValue loads value from config to fieldValue. It's a terminal method for recursive cycle of loadStruct.
 func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect.Value, config *configuration.Config) error {
-	tag, err := mapTag(field.Tag)
+	tagMap, err := mapTag(field.Tag)
 	if err != nil {
 		return err
 	}
@@ -146,8 +145,9 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 
 	typ := fieldValue.Elem().Type()
 
-	rawDefault := tag.defaultValue
-	if tag.defaultProvided {
+	hasDefault := false
+	rawDefault := ""
+	if rawDefault, hasDefault = tagMap[defaultKey]; hasDefault {
 		if typ.Kind() == reflect.Slice {
 			return fmt.Errorf("slices do not support default value: %s [%s]", field.Name, field.Tag)
 		}
@@ -155,7 +155,6 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 		if !config.HasPath(currentPath) {
 			return fmt.Errorf("no value either default value provided for %s [%s]", field.Name, field.Tag)
 		}
-		rawDefault = getTypeDefault(typ)
 	}
 
 	switch typ.Kind() {
@@ -168,22 +167,33 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Float32, reflect.Float64, reflect.Bool:
-		defaultValue, err := parseType(typ, rawDefault)
-		if err != nil {
-			return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err)
+
+		var defaultValue *reflect.Value
+		if hasDefault {
+			// we must check the correctness of default value even if value is provided
+			var err1 error
+			defaultValue, err1 = parseType(typ, rawDefault)
+			if err1 != nil {
+				return fmt.Errorf("wrong default value for %s [%s]: %w", field.Name, field.Tag, err1)
+			}
 		}
 
-		//stringValue := config.GetString(currentPath, rawDefault)
 		hoconValue := config.GetValue(currentPath)
 
-		value, err := parseHoconValue(typ, hoconValue, defaultValue)
+		value, err := parseHoconValue(typ, hoconValue)
 		if err != nil {
 			return fmt.Errorf("wrong value for %s [%s]: %w", field.Name, field.Tag, err)
 		}
-		fieldValue.Elem().Set(*value)
+
+		if value != nil {
+			fieldValue.Elem().Set(*value)
+			return nil
+		}
+		fieldValue.Elem().Set(*defaultValue)
+		return nil
 
 	case reflect.String:
-		typedValue := config.GetString(currentPath, rawDefault)
+		typedValue := config.GetString(currentPath)
 		fieldValue.Elem().SetString(typedValue)
 
 	case reflect.Slice:
@@ -223,7 +233,10 @@ func parseType(typ reflect.Type, stringValue string) (*reflect.Value, error) {
 
 // parseType parses given string according to given reflect.Type and returns reflect.Value of this type.
 func parseHoconValue(typ reflect.Type, stringValue *hocon.HoconValue, defaultValue ...*reflect.Value) (*reflect.Value, error) {
-	if stringValue == nil { // todo if defaultvalue nil
+	if stringValue == nil {
+		if defaultValue == nil {
+			return nil, nil
+		}
 		return defaultValue[0], nil
 	}
 
@@ -288,15 +301,10 @@ func parseList(typ reflect.Type, listValue reflect.Value) (reflect.Value, error)
 	return sliceValue, nil
 }
 
-func getTypeDefault(typ reflect.Type) string {
-	v := reflect.Zero(typ)
-	return fmt.Sprintf("%v", reflect.ValueOf(v).Interface())
-}
-
 // mapTag parses StructTag to aux Tag struct.
-func mapTag(structTag reflect.StructTag) (*tag, error) {
+func mapTag(structTag reflect.StructTag) (map[string]string, error) {
 	stringTag := structTag.Get("hocon")
-	var tag tag
+	tagMap := make(map[string]string)
 	if stringTag != "" {
 		for _, item := range strings.Split(stringTag, ",") {
 			pair := strings.Split(item, "=")
@@ -305,20 +313,12 @@ func mapTag(structTag reflect.StructTag) (*tag, error) {
 			}
 			key, value := pair[0], pair[1]
 
-			switch key {
-			case "path":
-				tag.path = value
-				tag.pathProvided = true
-			case "default":
-				tag.defaultValue = value
-				tag.defaultProvided = true
-			case "node":
-				tag.node = value
-				tag.nodeProvided = true
+			if _, exists := tagKeys[key]; exists {
+				tagMap[key] = value
 			}
 		}
 	}
-	return &tag, nil
+	return tagMap, nil
 }
 
 // checkFileAccessibility checks if a file accessible and is not a directory before we
