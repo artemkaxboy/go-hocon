@@ -202,6 +202,20 @@ func TestCorrectFloatDefault(t *testing.T) {
 	}
 }
 
+func TestCorrectStringDefault(t *testing.T) {
+	props1 := struct {
+		Field1 string `hocon:"default=1e3"`
+		Field2 string `hocon:"default=abc"`
+		Field3 string `hocon:"default="`
+	}{}
+	err := LoadConfigText("{Field2:}", &props1)
+	if assert.Nil(t, err) {
+		assert.Equal(t, "1e3", props1.Field1)
+		assert.Equal(t, "", props1.Field2)
+		assert.Equal(t, "", props1.Field3)
+	}
+}
+
 func TestIncorrectFloat32(t *testing.T) {
 	props1 := struct {
 		Field1 float32

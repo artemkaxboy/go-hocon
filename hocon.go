@@ -190,7 +190,7 @@ func loadValue(parentPath string, field *reflect.StructField, fieldValue reflect
 		return nil
 
 	case reflect.String:
-		typedValue := config.GetString(currentPath)
+		typedValue := config.GetString(currentPath, rawDefault)
 		fieldValue.Elem().SetString(typedValue)
 
 	case reflect.Slice:
